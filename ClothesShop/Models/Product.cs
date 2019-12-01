@@ -1,9 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Runtime.Serialization;
-using System.Runtime.Serialization.Json;
 using Newtonsoft.Json;
 
 namespace ClothesShop.Models{
@@ -20,6 +18,17 @@ namespace ClothesShop.Models{
 		[DataMember]
 		public bool Returnable { get; set; }
 		[JsonIgnore]
-		public ICollection<CashDeskAction> CashDeskActions { get; set; }
+		public ICollection<Purchase> Purchases { get; set; }
+
+		public void Return() => Quantity++;
+
+		public Purchase Purchase() {
+			Quantity--;
+			if (Purchases == null)
+				Purchases = new List<Purchase>();
+			var purchase = new Purchase(Returnable);
+			Purchases.Add(purchase);
+			return purchase;
+		}
 	}
 }

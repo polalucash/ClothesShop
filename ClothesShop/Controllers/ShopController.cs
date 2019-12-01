@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ClothesShop.Controllers
 {
-    [Route("api/[controller]")]
+    [Route("[controller]")]
     [ApiController]
     public class ShopController : ControllerBase
     {
@@ -17,15 +17,45 @@ namespace ClothesShop.Controllers
 		{
 			_context = context;
 		}
+		// GET: shop/statistics?year=2019&month=12
+		[HttpGet("statistics")]
+		public ActionResult<IEnumerator<MonthlyStatisticRecord>> GetMonthlyStatistics(int year, int month) {
+			if(year < 1 || month < 1 || month > 12 || year > DateTime.Today.Year) {
+				return BadRequest();
+			}
 
-		// GET: api/Products
+			var dailyPurchases = _context.Purchase
+				.Where(r => r.PurchaseDate.Month == month
+							&& r.PurchaseDate.Year == year)
+				.ToList()
+				.GroupBy(r => r.PurchaseDate.Day)
+				.ToDictionary(r => r.Key, r => r.Count());
+
+			var dailyReturns = _context.Purchase
+				.Where(r => r.ReturnDate.HasValue
+							&& r.ReturnDate.Value.Date.Month == month
+							&& r.ReturnDate.Value.Date.Year == year)
+				.ToList()
+				.GroupBy(r => r.ReturnDate.Value.Day)
+				.ToDictionary(r => r.Key, r => r.Count());
+
+			return new JsonResult(Enumerable.Range(1, DateTime.DaysInMonth(year, month))
+				.Select(i => new MonthlyStatisticRecord
+				{
+					Day = i,
+					Returns = dailyReturns.TryGetValue(i, out var returns) ? returns : 0,
+					Purchases = dailyPurchases.TryGetValue(i, out var purchases) ? purchases : 0
+				}).GetEnumerator());
+		}
+
+		// GET: shop/Products
 		[HttpGet("Products")]
 		public async Task<ActionResult<IEnumerable<Product>>> GetProducts()
 		{
 			return await _context.Product.ToListAsync();
 		}
 
-		// GET: api/Products/5
+		// GET: shop/Products/5
 		[HttpGet("Product={id}")]
 		public async Task<ActionResult<Product>> GetProduct(int id)
 		{
@@ -39,32 +69,32 @@ namespace ClothesShop.Controllers
 			return product;
 		}
 
-		// GET: api/CashDeskActions
-		[HttpGet("Receipts")]
-		public async Task<ActionResult<IEnumerable<CashDeskAction>>> GetCashDeskAction()
+		// GET: shop/Purchases
+		[HttpGet("Purchases")]
+		public async Task<ActionResult<IEnumerable<Purchase>>> GetPurchase()
 		{
-			return await _context.CashDeskAction.ToListAsync();
+			return await _context.Purchase.ToListAsync();
 		}
 
-		// GET: api/CashDeskActions/5
-		[HttpGet("Receipt={id}")]
-		public async Task<ActionResult<CashDeskAction>> GetCashDeskAction(int id)
+		// GET: shop/Purchases/5
+		[HttpGet("Purchases={id}")]
+		public async Task<ActionResult<Purchase>> GetPurchase(int id)
 		{
-			var cashDeskAction = await _context.CashDeskAction.FindAsync(id);
+			var purchase = await _context.Purchase.FindAsync(id);
 
-			if (cashDeskAction == null)
+			if (purchase == null)
 			{
 				return NotFound();
 			}
 
-			return cashDeskAction;
+			return purchase;
 		}
 
-		[HttpPost("PurchaseProduct={id}")]
-		public async Task<IActionResult> PurchaseAsync(int id)
+		[HttpPost("PurchaseProduct")]
+		public async Task<IActionResult> PurchaseProductAsync(int id)
 		{
 			var product = await _context.Product
-				.Include(r=>r.CashDeskActions)
+				.Include(r=>r.Purchases)
 				.FirstOrDefaultAsync(r=>r.ProductId==id);
 
 			if(product == null) {
@@ -75,11 +105,7 @@ namespace ClothesShop.Controllers
 				return BadRequest();
 			}
 
-			product.Quantity--;
-			if(product.CashDeskActions == null) 
-				product.CashDeskActions = new List<CashDeskAction>();
-			var purchaseAction = new CashDeskAction(true);
-			product.CashDeskActions.Add(purchaseAction);
+			var purchase = product.Purchase();
 			_context.Entry(product).State = EntityState.Modified;
 
 			try
@@ -94,34 +120,28 @@ namespace ClothesShop.Controllers
 				}
 				throw;
 			}
-			return CreatedAtAction("GetCashDeskAction", new { id = purchaseAction.ActionId }, purchaseAction);
+			return CreatedAtAction("GetPurchase", new { id = purchase.PurchaseId }, purchase);
 		}
 
-		[HttpPost("ReturnProduct={id}")]
-		public async Task<IActionResult> ReturnAsync(int id)
+		[HttpPut("ReturnPurchase")]
+		public async Task<IActionResult> ReturnPurchaseAsync(int id)
 		{
-			var purchaseAction = await _context.CashDeskAction
+			var purchase = await _context.Purchase
 				.Include(r => r.Product)
-				.FirstOrDefaultAsync(r => r.ActionId == id);
+				.FirstOrDefaultAsync(r => r.PurchaseId == id);
 
-			if (purchaseAction == null)
+			if (purchase == null)
 				return NotFound();
 
-			string message;
-
-			if (!purchaseAction.Product.Returnable)
+			if (!purchase.Returnable || !purchase.Product.Returnable)
 				return BadRequest(new { message = "The product is not returnable" });
 			
-			if (DateTime.UtcNow.Subtract(purchaseAction.Date).Days > 30)
+			if (DateTime.UtcNow.Subtract(purchase.PurchaseDate).Days > 30)
 				return BadRequest(new { message = "Over 30 days, return not accepted" });
 
-			message = DateTime.UtcNow.Subtract(purchaseAction.Date).Days < 15 
-				? "Under 15 days, cash return" 
-				: "Between 15 to 30 days, 'check' return";
-			
-			purchaseAction.Product.Quantity++;
-			purchaseAction.Product.CashDeskActions.Add(new CashDeskAction(false));
-			_context.Entry(purchaseAction.Product).State = EntityState.Modified;
+			purchase.Return();
+			_context.Entry(purchase).State = EntityState.Modified;
+			_context.Entry(purchase.Product).State = EntityState.Modified;
 
 			try
 			{
@@ -135,8 +155,12 @@ namespace ClothesShop.Controllers
 				}
 				throw;
 			}
-			return Accepted(new{message});
 
+			var message = DateTime.UtcNow.Subtract(purchase.PurchaseDate).Days < 15
+				? "Under 15 days, cash return"
+				: "Between 15 to 30 days, 'check' return";
+
+			return Accepted(new{message});
 		}
 
 		[HttpPut("{id}")]
@@ -164,7 +188,7 @@ namespace ClothesShop.Controllers
 			}
 			return NoContent();
 		}
-		[HttpPost]
+		[HttpPost("Product")]
 		public async Task<ActionResult<Product>> CreateProduct(Product product)
 		{
 			_context.Product.Add(product);
@@ -172,22 +196,6 @@ namespace ClothesShop.Controllers
 
 			return CreatedAtAction("GetProduct", new { id = product.ProductId }, product);
 		}
-		// DELETE: api/Products/5
-		[HttpDelete("Product={id}")]
-		public async Task<ActionResult<Product>> DeleteProduct(int id)
-		{
-			var product = await _context.Product.FindAsync(id);
-			if (product == null)
-			{
-				return NotFound();
-			}
-
-			_context.Product.Remove(product);
-			await _context.SaveChangesAsync();
-
-			return product;
-		}
-
 		private bool ProductExists(int id)
 		{
 			return _context.Product.Any(e => e.ProductId == id);

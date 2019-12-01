@@ -10,9 +10,7 @@ namespace ClothesShop.Models{
 
 		public DbSet<Product> Product { get; set; }
 
-		public DbSet<CashDeskAction> CashDeskAction { get; set; }
-
-		public DbSet<ClothesShop.Models.Purchase> Purchase { get; set; }
+		public DbSet<Purchase> Purchase { get; set; }
 
 
 		

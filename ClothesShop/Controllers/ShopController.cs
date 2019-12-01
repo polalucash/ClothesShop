@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ClothesShop.Controllers
 {
-    [Route("[controller]")]
+    [Route("[api/controller]")]
     [ApiController]
     public class ShopController : ControllerBase
     {
@@ -18,38 +18,7 @@ namespace ClothesShop.Controllers
 		{
 			_context = context;
 		}
-		// GET: shop/statistics?year=2019&month=12
-		[HttpGet("statistics")]
-		public ActionResult<IEnumerator<MonthlyStatisticRecord>> GetMonthlyStatistics(int year, int month) {
-			if(year < 1 || month < 1 || month > 12 || year > DateTime.Today.Year) {
-				return BadRequest();
-			}
-
-			var dailyPurchases = _context.Purchase
-				.Where(r => r.PurchaseDate.Month == month
-							&& r.PurchaseDate.Year == year)
-				.AsNoTracking()
-				.ToList()
-				.GroupBy(r => r.PurchaseDate.Day)
-				.ToDictionary(r => r.Key, r => r.Count());
-
-			var dailyReturns = _context.Purchase
-				.Where(r => r.ReturnDate.HasValue
-							&& r.ReturnDate.Value.Date.Month == month
-							&& r.ReturnDate.Value.Date.Year == year)
-				.AsNoTracking()
-				.ToList()
-				.GroupBy(r => r.ReturnDate.Value.Day)
-				.ToDictionary(r => r.Key, r => r.Count());
-
-			return new JsonResult(Enumerable.Range(1, DateTime.DaysInMonth(year, month))
-				.Select(i => new MonthlyStatisticRecord
-				{
-					Day = i,
-					Returns = dailyReturns.TryGetValue(i, out var returns) ? returns : 0,
-					Purchases = dailyPurchases.TryGetValue(i, out var purchases) ? purchases : 0
-				}).GetEnumerator());
-		}
+		
 
 		// GET: shop/Products
 		[HttpGet("Products")]
@@ -93,6 +62,40 @@ namespace ClothesShop.Controllers
 			}
 
 			return purchase;
+		}
+		// GET: shop/statistics?year=2019&month=12
+		[HttpGet("statistics")]
+		public ActionResult<IEnumerator<MonthlyStatisticRecord>> GetMonthlyStatistics(int year, int month)
+		{
+			if (year < 1 || month < 1 || month > 12 || year > DateTime.Today.Year)
+			{
+				return BadRequest();
+			}
+
+			var dailyPurchases = _context.Purchase
+				.Where(r => r.PurchaseDate.Month == month
+							&& r.PurchaseDate.Year == year)
+				.AsNoTracking()
+				.ToList()
+				.GroupBy(r => r.PurchaseDate.Day)
+				.ToDictionary(r => r.Key, r => r.Count());
+
+			var dailyReturns = _context.Purchase
+				.Where(r => r.ReturnDate.HasValue
+							&& r.ReturnDate.Value.Date.Month == month
+							&& r.ReturnDate.Value.Date.Year == year)
+				.AsNoTracking()
+				.ToList()
+				.GroupBy(r => r.ReturnDate.Value.Day)
+				.ToDictionary(r => r.Key, r => r.Count());
+
+			return new JsonResult(Enumerable.Range(1, DateTime.DaysInMonth(year, month))
+				.Select(i => new MonthlyStatisticRecord
+				{
+					Day = i,
+					Returns = dailyReturns.TryGetValue(i, out var returns) ? returns : 0,
+					Purchases = dailyPurchases.TryGetValue(i, out var purchases) ? purchases : 0
+				}).GetEnumerator());
 		}
 
 		[HttpPost("PurchaseProduct")]

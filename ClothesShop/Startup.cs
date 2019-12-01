@@ -1,3 +1,4 @@
+using ClothesShop.Data;
 using ClothesShop.Models;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;

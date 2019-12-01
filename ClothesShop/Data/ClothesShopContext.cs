@@ -1,6 +1,7 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using ClothesShop.Models;
+using Microsoft.EntityFrameworkCore;
 
-namespace ClothesShop.Models{
+namespace ClothesShop.Data{
 
 	public class ClothesShopContext: DbContext{
 		public ClothesShopContext(DbContextOptions<ClothesShopContext> options)

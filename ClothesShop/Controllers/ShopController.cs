@@ -28,6 +28,7 @@ namespace ClothesShop.Controllers
 			var dailyPurchases = _context.Purchase
 				.Where(r => r.PurchaseDate.Month == month
 							&& r.PurchaseDate.Year == year)
+				.AsNoTracking()
 				.ToList()
 				.GroupBy(r => r.PurchaseDate.Day)
 				.ToDictionary(r => r.Key, r => r.Count());
@@ -36,6 +37,7 @@ namespace ClothesShop.Controllers
 				.Where(r => r.ReturnDate.HasValue
 							&& r.ReturnDate.Value.Date.Month == month
 							&& r.ReturnDate.Value.Date.Year == year)
+				.AsNoTracking()
 				.ToList()
 				.GroupBy(r => r.ReturnDate.Value.Day)
 				.ToDictionary(r => r.Key, r => r.Count());
@@ -53,7 +55,9 @@ namespace ClothesShop.Controllers
 		[HttpGet("Products")]
 		public async Task<ActionResult<IEnumerable<Product>>> GetProducts()
 		{
-			return await _context.Product.ToListAsync();
+			return await _context.Product
+				.AsNoTracking()
+				.ToListAsync();
 		}
 
 		// GET: shop/Products/5
@@ -111,7 +115,7 @@ namespace ClothesShop.Controllers
 
 			try
 			{
-				_context.SaveChanges();
+				await _context.SaveChangesAsync();
 			}
 			catch (DbUpdateConcurrencyException)
 			{
@@ -146,7 +150,7 @@ namespace ClothesShop.Controllers
 
 			try
 			{
-				_context.SaveChanges();
+				await _context.SaveChangesAsync();
 			}
 			catch (DbUpdateConcurrencyException)
 			{
@@ -161,7 +165,7 @@ namespace ClothesShop.Controllers
 				? "Under 15 days, cash return"
 				: "Between 15 to 30 days, 'check' return";
 
-			return Accepted(new{message});
+			return Accepted(new{ message, purchase });
 		}
 
 		[HttpPut("{id}")]
@@ -171,7 +175,10 @@ namespace ClothesShop.Controllers
 				return BadRequest();
 			}
 
-			var productToUpdate =await _context.Product.FindAsync(id);
+			var productToUpdate = await _context.Product
+				.AsTracking()
+				.FirstOrDefaultAsync(r => r.ProductId == id);
+
 			productToUpdate.Quantity = product.Quantity;
 			_context.Entry(productToUpdate).State = EntityState.Modified;
 

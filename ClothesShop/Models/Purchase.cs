@@ -8,24 +8,17 @@ namespace ClothesShop.Models
 {
 	[Serializable]
 	[DataContract(IsReference = false)]
-	public class CashDeskAction
+	public class Purchase
 	{
-		public CashDeskAction()
-		{
-		}
-
-		public CashDeskAction(bool isPurchase) {
-			Date = DateTime.UtcNow;
-			IsPurchase = isPurchase;
-		}
-
 		[Key]
 		[DataMember]
-		public int ActionId { get; set; }
+		public int PurchaseId { get; set; }
 		[DataMember]
-		public DateTime Date { get; set; }
+		public DateTime PurchaseDate { get; set; }
 		[DataMember]
-		public bool IsPurchase { get; set; }
+		public bool Returnable { get; set; }
+		[DataMember]
+		public DateTime ReturnDate { get; set; }
 		[JsonIgnore]
 		public Product Product { get; set; }
 		[DataMember]

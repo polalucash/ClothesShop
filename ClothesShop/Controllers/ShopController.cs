@@ -18,10 +18,55 @@ namespace ClothesShop.Controllers
 			_context = context;
 		}
 
-		[HttpPost("Purchase={id}")]
-		public IActionResult Purchase(int id)
+		// GET: api/Products
+		[HttpGet("Products")]
+		public async Task<ActionResult<IEnumerable<Product>>> GetProducts()
 		{
-			var product = _context.Product.Find(id);
+			return await _context.Product.ToListAsync();
+		}
+
+		// GET: api/Products/5
+		[HttpGet("Product={id}")]
+		public async Task<ActionResult<Product>> GetProduct(int id)
+		{
+			var product = await _context.Product.FindAsync(id);
+
+			if (product == null)
+			{
+				return NotFound();
+			}
+
+			return product;
+		}
+
+		// GET: api/CashDeskActions
+		[HttpGet("Receipts")]
+		public async Task<ActionResult<IEnumerable<CashDeskAction>>> GetCashDeskAction()
+		{
+			return await _context.CashDeskAction.ToListAsync();
+		}
+
+		// GET: api/CashDeskActions/5
+		[HttpGet("Receipt={id}")]
+		public async Task<ActionResult<CashDeskAction>> GetCashDeskAction(int id)
+		{
+			var cashDeskAction = await _context.CashDeskAction.FindAsync(id);
+
+			if (cashDeskAction == null)
+			{
+				return NotFound();
+			}
+
+			return cashDeskAction;
+		}
+
+		[HttpPost("PurchaseProduct={id}")]
+		public async Task<IActionResult> PurchaseAsync(int id)
+		{
+			var product = await _context.Product
+				.Include(r=>r.CashDeskActions)
+				.FirstOrDefaultAsync(r=>r.ProductId==id);
+
 			if(product == null) {
 				return NotFound();
 			}
@@ -33,7 +78,8 @@ namespace ClothesShop.Controllers
 			product.Quantity--;
 			if(product.CashDeskActions == null) 
 				product.CashDeskActions = new List<CashDeskAction>();
-			product.CashDeskActions.Add(new CashDeskAction(true));
+			var purchaseAction = new CashDeskAction(true);
+			product.CashDeskActions.Add(purchaseAction);
 			_context.Entry(product).State = EntityState.Modified;
 
 			try
@@ -48,43 +94,49 @@ namespace ClothesShop.Controllers
 				}
 				throw;
 			}
-			return NoContent();
+			return CreatedAtAction("GetCashDeskAction", new { id = purchaseAction.ActionId }, purchaseAction);
 		}
 
-		[HttpPost("Return={id}")]
-		public IActionResult Return(int id)
+		[HttpPost("ReturnProduct={id}")]
+		public async Task<IActionResult> ReturnAsync(int id)
 		{
-			var product = _context.Product.Find(id);
-			if (product == null)
-			{
+			var purchaseAction = await _context.CashDeskAction
+				.Include(r => r.Product)
+				.FirstOrDefaultAsync(r => r.ActionId == id);
+
+			if (purchaseAction == null)
 				return NotFound();
-			}
 
-			if(product.Returnable)
+			string message;
+
+			if (!purchaseAction.Product.Returnable)
+				return BadRequest(new { message = "The product is not returnable" });
+			
+			if (DateTime.UtcNow.Subtract(purchaseAction.Date).Days > 30)
+				return BadRequest(new { message = "Over 30 days, return not accepted" });
+
+			message = DateTime.UtcNow.Subtract(purchaseAction.Date).Days < 15 
+				? "Under 15 days, cash return" 
+				: "Between 15 to 30 days, 'check' return";
+			
+			purchaseAction.Product.Quantity++;
+			purchaseAction.Product.CashDeskActions.Add(new CashDeskAction(false));
+			_context.Entry(purchaseAction.Product).State = EntityState.Modified;
+
+			try
 			{
-				product.Quantity++;
-				if (product.CashDeskActions == null)
-					product.CashDeskActions = new List<CashDeskAction>();
-
-				product.CashDeskActions.Add(new CashDeskAction(false));
-				_context.Entry(product).State = EntityState.Modified;
-
-				try
-				{
-					_context.SaveChanges();
-				}
-				catch (DbUpdateConcurrencyException)
-				{
-					if (!ProductExists(id))
-					{
-						return NotFound();
-					}
-					throw;
-				}
-				return NoContent();
+				_context.SaveChanges();
 			}
+			catch (DbUpdateConcurrencyException)
+			{
+				if (!ProductExists(id))
+				{
+					return NotFound();
+				}
+				throw;
+			}
+			return Accepted(new{message});
 
-			return BadRequest();
 		}
 
 		[HttpPut("{id}")]
@@ -112,26 +164,6 @@ namespace ClothesShop.Controllers
 			}
 			return NoContent();
 		}
-		// GET: api/Products
-		[HttpGet]
-		public async Task<ActionResult<IEnumerable<Product>>> GetProducts()
-		{
-			return await _context.Product.ToListAsync();
-		}
-
-		// GET: api/Products/5
-		[HttpGet("{id}")]
-		public async Task<ActionResult<Product>> GetProduct(int id)
-		{
-			var product = await _context.Product.FindAsync(id);
-
-			if (product == null)
-			{
-				return NotFound();
-			}
-
-			return product;
-		}
 		[HttpPost]
 		public async Task<ActionResult<Product>> CreateProduct(Product product)
 		{
@@ -140,9 +172,8 @@ namespace ClothesShop.Controllers
 
 			return CreatedAtAction("GetProduct", new { id = product.ProductId }, product);
 		}
-
 		// DELETE: api/Products/5
-		[HttpDelete("{id}")]
+		[HttpDelete("Product={id}")]
 		public async Task<ActionResult<Product>> DeleteProduct(int id)
 		{
 			var product = await _context.Product.FindAsync(id);

@@ -1,5 +1,4 @@
-﻿using System.Linq;
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 
 namespace ClothesShop.Models{
 
@@ -12,6 +11,8 @@ namespace ClothesShop.Models{
 		public DbSet<Product> Product { get; set; }
 
 		public DbSet<CashDeskAction> CashDeskAction { get; set; }
+
+		public DbSet<ClothesShop.Models.Purchase> Purchase { get; set; }
 
 
 		
